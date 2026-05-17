@@ -18,15 +18,21 @@ warn() { echo -e "${YELLOW}[!]${NC}  $1"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 install_apps() {
-	if command -v kitty &>/dev/null; then
-		ok "kitty já está instalado"
+	local pkgs=()
+
+	command -v kitty &>/dev/null || pkgs+=(kitty)
+	command -v fish &>/dev/null  || pkgs+=(fish)
+	command -v fzf &>/dev/null   || pkgs+=(fzf)
+	command -v starship &>/dev/null || pkgs+=(starship)
+	command -v code &>/dev/null  || pkgs+=(code)
+
+	if [[ ${#pkgs[@]} -eq 0 ]]; then
+		ok "todos os apps já estão instalados"
 		return
 	fi
-	info "Instalando kitty..."
-	sudo pacman -S --noconfirm kitty
-	sudo pacman -S --noconfirm starship
-	sudo pacman -S --noconfirm code
-	sudo pacman -S --noconfirm opencode
+
+	info "Instalando: ${pkgs[*]}"
+	sudo pacman -S --noconfirm "${pkgs[@]}"
 	ok "apps instalados"
 }
 
@@ -58,6 +64,7 @@ create_symlinks() {
 	create_symlink "$SCRIPT_DIR/kitty/kitty-theme.conf" "$HOME/.config/kitty/kitty-theme.conf"
 	create_symlink "$SCRIPT_DIR/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
 	create_symlink "$SCRIPT_DIR/starship.toml"          "$HOME/.config/starship.toml"
+	create_symlink "$SCRIPT_DIR/fish"                   "$HOME/.config/fish"
 }
 
 set_default_terminal() {
@@ -75,6 +82,42 @@ set_default_terminal() {
 	$kwrite --file kdeglobals --group General --key TerminalApplication kitty
 	$kwrite --file kdeglobals --group General --key TerminalService kitty.desktop
 	ok "kitty definido como terminal padrão do KDE"
+}
+
+setup_fish() {
+	if ! command -v fish &>/dev/null; then
+		warn "fish não está instalado — pulando configuração"
+		return
+	fi
+
+	local fish_conf="$HOME/.config/fish/config.fish"
+	if [ -L "$fish_conf" ]; then
+		info "Convertendo config.fish de symlink para arquivo editável..."
+		local src
+		src="$(readlink "$fish_conf")"
+		rm "$fish_conf"
+		cp "$src" "$fish_conf"
+		ok "config.fish convertido"
+	fi
+
+	info "Instalando fisher e plugins de autocomplete..."
+	fish -c "
+		if not functions -q fisher
+			curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source
+			fisher install jorgebucaran/fisher
+		end
+		fisher update
+	" 2>/dev/null || warn "fisher/plugins: verifique manualmente"
+	ok "fisher e plugins instalados"
+
+	if [ "$SHELL" != "$(command -v fish)" ]; then
+		info "Definindo fish como shell padrão..."
+		if ! grep -qF "$(command -v fish)" /etc/shells 2>/dev/null; then
+			echo "$(command -v fish)" | sudo tee -a /etc/shells
+		fi
+		sudo usermod -s "$(command -v fish)" "$(id -un)" || warn "Não foi possível definir fish como shell padrão"
+		ok "fish definido como shell padrão (efetivo na próxima sessão)"
+	fi
 }
 
 set_wallpaper() {
@@ -110,6 +153,7 @@ echo -e "${CYAN}╚════════════════════�
 
 install_apps
 create_symlinks
+setup_fish
 set_default_terminal
 set_wallpaper
 
