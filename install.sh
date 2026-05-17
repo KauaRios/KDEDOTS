@@ -17,14 +17,17 @@ warn() { echo -e "${YELLOW}[!]${NC}  $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-install_kitty() {
+install_apps() {
 	if command -v kitty &>/dev/null; then
 		ok "kitty já está instalado"
 		return
 	fi
 	info "Instalando kitty..."
 	sudo pacman -S --noconfirm kitty
-	ok "kitty instalado"
+	sudo pacman -S --noconfirm starship
+	sudo pacman -S --noconfirm code
+	sudo pacman -S --noconfirm opencode
+	ok "apps instalados"
 }
 
 create_symlink() {
@@ -55,6 +58,23 @@ create_symlinks() {
 	create_symlink "$SCRIPT_DIR/kitty/kitty-theme.conf" "$HOME/.config/kitty/kitty-theme.conf"
 	create_symlink "$SCRIPT_DIR/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
 	create_symlink "$SCRIPT_DIR/starship.toml"          "$HOME/.config/starship.toml"
+}
+
+set_default_terminal() {
+	local kwrite
+	if command -v kwriteconfig6 &>/dev/null; then
+		kwrite="kwriteconfig6"
+	elif command -v kwriteconfig5 &>/dev/null; then
+		kwrite="kwriteconfig5"
+	else
+		warn "kwriteconfig não encontrado (instale kde-cli-tools)"
+		warn "Defina manualmente: TerminalApplication=kitty no ~/.config/kdeglobals"
+		return
+	fi
+
+	$kwrite --file kdeglobals --group General --key TerminalApplication kitty
+	$kwrite --file kdeglobals --group General --key TerminalService kitty.desktop
+	ok "kitty definido como terminal padrão do KDE"
 }
 
 set_wallpaper() {
@@ -88,8 +108,9 @@ echo -e "${CYAN}╔════════════════════�
 echo -e "${CYAN}║         kdedots — instalador KDE         ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
 
-install_kitty
+install_apps
 create_symlinks
+set_default_terminal
 set_wallpaper
 
 echo ""
