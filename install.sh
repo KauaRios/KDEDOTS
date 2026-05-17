@@ -6,76 +6,25 @@
 
 set -euo pipefail
 
-# ── Cores ──────────────────────────────────────────────────────────────
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# ── Flags ──────────────────────────────────────────────────────────────
-DRY_RUN=false
-NO_INSTALL=false
-NO_WALLPAPER=false
-
-# ── Help ───────────────────────────────────────────────────────────────
-usage() {
-	cat <<EOF
-Uso: $(basename "$0") [opções]
-
-Opções:
-  --dry-run       Mostra o que será feito sem modificar nada
-  --no-install    Pula a instalação de pacotes
-  --no-wallpaper  Pula a configuração do wallpaper
-  -h, --help      Mostra esta ajuda
-EOF
-	exit 0
-}
-
-while [[ $# -gt 0 ]]; do
-	case "$1" in
-		--dry-run) DRY_RUN=true ;;
-		--no-install) NO_INSTALL=true ;;
-		--no-wallpaper) NO_WALLPAPER=true ;;
-		-h | --help) usage ;;
-		*) echo -e "${RED}Opção desconhecida: $1${NC}" && exit 1 ;;
-	esac
-	shift
-done
-
-# ── Helpers ────────────────────────────────────────────────────────────
-info()  { echo -e "${CYAN}[..]${NC} $1"; }
-ok()    { echo -e "${GREEN}[ok]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[!]${NC}  $1"; }
-err()   { echo -e "${RED}[✗]${NC}  $1"; }
-
-run() {
-	if $DRY_RUN; then
-		warn "dry-run: $*"
-	else
-		eval "$*"
-	fi
-}
+info() { echo -e "${CYAN}[..]${NC} $1"; }
+ok()   { echo -e "${GREEN}[ok]${NC} $1"; }
+warn() { echo -e "${YELLOW}[!]${NC}  $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ── Funções ────────────────────────────────────────────────────────────
-
 install_kitty() {
-	$NO_INSTALL && return
-
 	if command -v kitty &>/dev/null; then
 		ok "kitty já está instalado"
 		return
 	fi
-
 	info "Instalando kitty..."
-	if $DRY_RUN; then
-		warn "dry-run: sudo pacman -S --noconfirm kitty"
-	else
-		sudo pacman -S --noconfirm kitty
-		ok "kitty instalado"
-	fi
+	sudo pacman -S --noconfirm kitty
+	ok "kitty instalado"
 }
 
 create_symlink() {
@@ -90,10 +39,11 @@ create_symlink() {
 	if [ -e "$dst" ]; then
 		local backup="${dst}_backup"
 		warn "$dst já existe, movendo para $backup"
-		run "mv \"$dst\" \"$backup\""
+		mv "$dst" "$backup"
 	fi
 
-	run "mkdir -p \"$(dirname "$dst")\" && ln -sf \"$src\" \"$dst\""
+	mkdir -p "$(dirname "$dst")"
+	ln -sf "$src" "$dst"
 	ok "symlink: $dst → $src"
 }
 
@@ -101,14 +51,13 @@ create_symlinks() {
 	echo ""
 	info "Criando symlinks..."
 
-	create_symlink "$SCRIPT_DIR/kitty/kitty.conf"       "$HOME/.config/kitty/kitty.conf"
-	create_symlink "$SCRIPT_DIR/kitty/kitty-theme.conf"  "$HOME/.config/kitty/kitty-theme.conf"
-	create_symlink "$SCRIPT_DIR/fastfetch/config.jsonc"  "$HOME/.config/fastfetch/config.jsonc"
+	create_symlink "$SCRIPT_DIR/kitty/kitty.conf"      "$HOME/.config/kitty/kitty.conf"
+	create_symlink "$SCRIPT_DIR/kitty/kitty-theme.conf" "$HOME/.config/kitty/kitty-theme.conf"
+	create_symlink "$SCRIPT_DIR/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
+	create_symlink "$SCRIPT_DIR/starship.toml"          "$HOME/.config/starship.toml"
 }
 
 set_wallpaper() {
-	$NO_WALLPAPER && return
-
 	local wp_src="$SCRIPT_DIR/wallpapers/wallpaper.png"
 
 	if [ ! -f "$wp_src" ]; then
@@ -120,12 +69,13 @@ set_wallpaper() {
 	local wp_dst="$wp_dir/wallpaper.png"
 
 	if [ ! -f "$wp_dst" ]; then
-		run "mkdir -p \"$wp_dir\" && cp \"$wp_src\" \"$wp_dst\""
+		mkdir -p "$wp_dir"
+		cp "$wp_src" "$wp_dst"
 		ok "Wallpaper copiado para $wp_dst"
 	fi
 
 	if command -v plasma-apply-wallpaperimage &>/dev/null; then
-		run "plasma-apply-wallpaperimage -s All \"$wp_dst\""
+		plasma-apply-wallpaperimage -s All "$wp_dst"
 		ok "Wallpaper aplicado em todos os monitores"
 	else
 		warn "plasma-apply-wallpaperimage não encontrado (instale plasma-workspace)"
@@ -133,14 +83,10 @@ set_wallpaper() {
 	fi
 }
 
-# ── Main ───────────────────────────────────────────────────────────────
-
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║         kdedots — instalador KDE         ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
-
-$DRY_RUN && warn "Modo dry-run — nenhuma alteração será feita\n"
 
 install_kitty
 create_symlinks
