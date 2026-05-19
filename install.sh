@@ -32,15 +32,23 @@ install_apps() {
 	fi
 
 	info "Instalando: ${pkgs[*]}"
-	sudo pacman -S --noconfirm "${pkgs[@]}"
-	ok "apps instalados"
+	if sudo pacman -S --noconfirm "${pkgs[@]}"; then
+		ok "apps instalados"
+	else
+		warn "falha ao instalar alguns pacotes — continuando com symlinks"
+	fi
 }
 
 create_symlink() {
 	local src="$1"
 	local dst="$2"
 
-	if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
+	if [ ! -e "$src" ]; then
+		warn "fonte não existe: $src"
+		return 1
+	fi
+
+	if [ -L "$dst" ] && [ "$(readlink -f "$dst")" = "$(readlink -f "$src")" ]; then
 		ok "symlink já existe: $dst → $src"
 		return
 	fi
@@ -53,7 +61,13 @@ create_symlink() {
 
 	mkdir -p "$(dirname "$dst")"
 	ln -sf "$src" "$dst"
-	ok "symlink: $dst → $src"
+
+	if [ -L "$dst" ]; then
+		ok "symlink criado: $dst → $src"
+	else
+		warn "falha ao criar symlink: $dst"
+		return 1
+	fi
 }
 
 create_symlinks() {
@@ -65,6 +79,22 @@ create_symlinks() {
 	create_symlink "$SCRIPT_DIR/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
 	create_symlink "$SCRIPT_DIR/starship.toml"          "$HOME/.config/starship.toml"
 	create_symlink "$SCRIPT_DIR/fish"                   "$HOME/.config/fish"
+
+	info "Verificando symlinks criados..."
+	local failed=0
+	for dst in "$HOME/.config/kitty/kitty.conf" "$HOME/.config/kitty/kitty-theme.conf" "$HOME/.config/fastfetch/config.jsonc" "$HOME/.config/starship.toml" "$HOME/.config/fish"; do
+		if [ -L "$dst" ]; then
+			ok "OK: $dst"
+		else
+			warn "FALHA: $dst não é um symlink válido"
+			failed=1
+		fi
+	done
+
+	if [ $failed -ne 0 ]; then
+		warn "Alguns symlinks falharam — verifique os logs acima"
+		return 1
+	fi
 }
 
 set_default_terminal() {
@@ -150,6 +180,9 @@ echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║         kdedots — instalador KDE         ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
+
+info "Diretório do script: $SCRIPT_DIR"
+info "Home do usuário: $HOME"
 
 install_apps
 create_symlinks
